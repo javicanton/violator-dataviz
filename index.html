@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Violator (Depeche Mode) · infografía interactiva</title>
+<meta name="description" content="Infografía interactiva sobre el álbum Violator de Depeche Mode: las canciones, sus caras B y sus atributos sonoros según Spotify.">
+<meta name="author" content="Javi Cantón-Correa">
+<meta name="theme-color" content="#000000">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <p class="intro" id="intro"></p>
+  <div class="lang" role="group" aria-label="Idioma / Language">
+    <button type="button" data-lang="es" aria-pressed="true">ES</button>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+  </div>
+</header>
+
+<main id="stage">
+  <svg id="viz" role="img" aria-labelledby="viz-title" preserveAspectRatio="xMidYMin meet">
+    <title id="viz-title">Violator, Depeche Mode</title>
+  </svg>
+
+  <!-- Bloques en HTML que sustituyen a la leyenda y los créditos del SVG en pantallas estrechas -->
+  <section class="m-only" id="m-legend"></section>
+  <section class="m-only" id="m-tracks"></section>
+  <section class="m-only" id="m-credits"></section>
+  <footer class="d-only" id="foot"></footer>
+</main>
+
+<aside id="panel" aria-hidden="true" tabindex="-1"></aside>
+
+<noscript><p style="color:#fff;padding:2rem;text-align:center">Esta infografía necesita JavaScript. Versión estática: <a style="color:#fff" href="assets/violator_spa.pdf">PDF</a></p></noscript>
+
+<script src="js/vendor/d3.min.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
