@@ -3,7 +3,13 @@ window.I18N = {
   es: {
     lang: "es",
     pageTitle: "Violator (Depeche Mode) · infografía interactiva",
-    intro: "Toca una hoja para leer sobre cada canción.",
+    intro: "Pulsa una hoja o un tramo del tallo para escuchar cada canción.",
+    play: "Reproducir",
+    pause: "Pausa",
+    previewNote: "Estás oyendo solo un fragmento (hasta 30 segundos). Para escuchar la canción completa, inicia sesión en Spotify en este navegador.",
+    blockedNote: "Si no empieza a sonar, pulsa el botón de reproducción del reproductor de Spotify.",
+    playerError: "No se ha podido cargar el reproductor de Spotify.",
+    nowPlaying: "Sonando",
     months: ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
     features: {
       danceability: ["bailabilidad", "Bailabilidad", "mide el grado de adecuación de un tema para ser bailado, según el tempo, la estabilidad del ritmo, la fuerza del compás y la regularidad general."],
@@ -49,7 +55,13 @@ window.I18N = {
   en: {
     lang: "en",
     pageTitle: "Violator (Depeche Mode) · interactive infographic",
-    intro: "Tap a leaf to read about each song.",
+    intro: "Click a leaf or a section of the stem to listen to each song.",
+    play: "Play",
+    pause: "Pause",
+    previewNote: "You are hearing only a preview (up to 30 seconds). To listen to the full song, log in to Spotify in this browser.",
+    blockedNote: "If it does not start, press the play button on the Spotify player.",
+    playerError: "The Spotify player could not be loaded.",
+    nowPlaying: "Now playing",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     features: {
       danceability: ["danceability", "Danceability", "measures the degree of suitability of a track to be danced to, according to tempo, rhythm stability, beat strength and overall regularity."],

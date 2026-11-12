@@ -155,8 +155,20 @@
     // Tallo: un tramo por canción, dibujado a partir de los picos de su forma de onda
     const stems = root.append("g").attr("class", "stems");
     tracks.filter(d => LAYOUT[d.id].seg).forEach(d => {
-      stems.append("path").attr("class", "stem").attr("data-id", d.id).attr("d", stemPath(d, LAYOUT[d.id].seg))
-        .on("click", () => select(d.id));
+      const seg = LAYOUT[d.id].seg, path = stemPath(d, seg);
+      const onClick = ev => {
+        // la altura del clic dentro del tramo indica desde qué punto de la canción empezar
+        const y = d3.pointer(ev, root.node())[1];
+        activate(d.id, Math.min(0.98, Math.max(0, (y - seg[0]) / (seg[1] - seg[0]))));
+      };
+      stems.append("path").attr("class", "stem").attr("data-id", d.id).attr("d", path).on("click", onClick);
+      // la parte ya escuchada se pinta encima, recortada por un rectángulo que crece con la reproducción
+      stems.append("clipPath").attr("id", "clip-" + d.id)
+        .append("rect").attr("x", seg[2] - STEM_HALF - 4).attr("y", seg[0]).attr("width", STEM_HALF * 2 + 8).attr("height", 0);
+      stems.append("path").attr("class", "stem-prog").attr("data-id", d.id).attr("d", path)
+        .attr("clip-path", `url(#clip-${d.id})`).on("click", onClick);
+      stems.append("rect").attr("class", "stem-hit").attr("data-id", d.id)
+        .attr("x", seg[2] - STEM_HALF - 6).attr("y", seg[0]).attr("width", STEM_HALF * 2 + 12).attr("height", seg[1] - seg[0]).on("click", onClick);
     });
 
     // Rosa y hojas
@@ -177,11 +189,12 @@
         .attr("class", "track " + d.type).attr("data-id", id)
         .attr("tabindex", 0).attr("role", "button")
         .attr("aria-label", id === "album" ? `${data.album.title}. ${t.album}` : `${d.title}. ${d.duration}, ${d.bpm} bpm, ${d.key}`)
-        .on("click", () => select(id))
-        .on("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(id); } });
+        .on("click", () => activate(id))
+        .on("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); activate(id); } });
 
       const r = g.append("g").attr("transform", `translate(${lay.c})`);
       r.append("circle").attr("class", "halo").attr("r", lay.L * 1.16);
+      if (id !== "album") r.append("circle").attr("class", "prog").attr("r", lay.L * 1.16).attr("transform", "rotate(-90)");
       drawRadar(r, lay.L, d.features, lay.L * 0.0095);
       r.append("circle").attr("class", "hit").attr("r", lay.L * 1.16);
 
@@ -210,6 +223,7 @@
     markActive();
     renderMobileBlocks(t);
     if (state.active) renderPanel();
+    updatePlayerUI();
   }
 
   function drawLegend(root, t) {
@@ -283,7 +297,7 @@
       LEGEND_ORDER.map(f => `<li>${iconSvg(f)}<span><b>${t.features[f][1]}</b>: ${t.features[f][2]}</span></li>`).join("") + "</ul>");
     d3.select("#m-tracks").html(`<h2>${t.tracksTitle}</h2><ol class="tl">` +
       tracks.map(d => `<li><button type="button" data-id="${d.id}"><span class="n">${d.n || "B"}</span><span class="ti">${d.title}</span><span class="du">${d.duration}</span></button></li>`).join("") + "</ol>");
-    d3.selectAll("#m-tracks button").on("click", function () { select(this.dataset.id); });
+    d3.selectAll("#m-tracks button").on("click", function () { activate(this.dataset.id); });
     d3.select("#m-credits").html(
       `<h2>${t.creditsTitle}</h2>` +
       `<p><b>${t.band}</b> Alan Wilder, David Gahan, Andrew Fletcher, Martin L. Gore</p>` +
@@ -335,22 +349,148 @@
     const bars = LEGEND_ORDER.map(f =>
       `<li>${iconSvg(f)}<span class="fn">${t.features[f][1]}</span>` +
       `<span class="bar"><span style="width:${(d.features[f] * 100).toFixed(1)}%"></span></span><span class="fv">${fmtVal(d.features[f])}</span></li>`).join("");
-    panel.html(
+    // El panel tiene tres zonas: cabecera y cuerpo se repintan; la del reproductor es fija para que
+    // el iframe de Spotify no se destruya al cambiar de canción.
+    if (panel.select("#p-top").empty()) {
+      panel.append("div").attr("id", "p-top");
+      const slot = panel.append("div").attr("id", "player-slot").attr("hidden", "");
+      slot.append("div").attr("id", "embed-wrap").append("div").attr("id", "embed");
+      slot.append("p").attr("class", "player-note").attr("id", "player-note");
+      panel.append("div").attr("id", "p-rest");
+    }
+    panel.select("#p-top").html(
       `<div class="p-head"><p class="kicker">${kicker}</p><button type="button" class="close" aria-label="${t.close}">×</button></div>` +
       `<h2>${d.title}</h2>` +
       `<p class="meta">${meta}</p>` +
+      (isAlbum ? "" : `<p class="player"><button type="button" class="btn play-btn" data-play="${id}"></button>` +
+        `<a class="ext" href="https://open.spotify.com/track/${d.spotify_id}" target="_blank" rel="noopener">${t.listen} ↗</a></p>`));
+    panel.select("#p-rest").html(
       (txt ? `<p class="txt">${txt}</p>` : "") +
       (d.hidden_track ? `<p class="hidden-track">${t.hidden}: ${d.hidden_track}</p>` : "") +
       (isAlbum ? `<p class="note">${t.albumMean}</p>` : "") +
       `<ul class="bars">${bars}</ul>` +
-      // Fase 4: aquí irá el reproductor incrustado; de momento, enlace directo
-      (isAlbum ? "" : `<p class="player"><a class="btn" href="https://open.spotify.com/track/${d.spotify_id}" target="_blank" rel="noopener">${t.listen}</a></p>`) +
       `<div class="nav"><button type="button" data-go="${prev}">← ${itemOf(prev).title}</button><button type="button" data-go="${next}">${itemOf(next).title} →</button></div>`);
     panel.attr("aria-hidden", "false"); document.body.classList.add("panel-open");
     panel.select(".close").on("click", () => select(null));
     panel.selectAll("[data-go]").on("click", function () { select(this.dataset.go, { scroll: true }); });
+    panel.select(".play-btn").on("click", function () { play(this.dataset.play); });
     panel.node().scrollTop = 0;
+    updatePlayerUI();
   }
+
+  // ---------- Reproductor (Spotify iFrame API) ----------
+  // Un único reproductor incrustado para toda la página. Con sesión iniciada en Spotify suena la canción
+  // completa; sin ella, un fragmento de 30 segundos. La posición que comunica Spotify mueve el progreso
+  // sobre el tallo y el anillo de cada radar.
+  const player = { api: null, ctrl: null, creating: false, id: null, paused: true, pos: 0, dur: 0, full: false, error: false, started: false };
+  const mmss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+  function loadSpotifyApi() {
+    if (!player.api) {
+      player.api = new Promise((resolve, reject) => {
+        window.onSpotifyIframeApiReady = api => resolve(api);
+        const s = document.createElement("script");
+        s.src = "https://open.spotify.com/embed/iframe-api/v1"; s.async = true;
+        s.onerror = () => reject(new Error("Spotify iFrame API"));
+        document.head.appendChild(s);
+      });
+      player.api.catch(() => { player.error = true; updatePlayerUI(); });
+    }
+    return player.api;
+  }
+
+  // Abre el panel de una pista y la hace sonar. frac (0-1) es el punto de inicio si se pulsó sobre el tallo.
+  function activate(id, frac) {
+    if (id === "album") { select(id); return; }
+    if (state.active !== id) select(id);
+    play(id, frac);
+  }
+
+  function play(id, frac) {
+    const d = byId.get(id); if (!d) return;
+    const same = player.id === id && player.ctrl;
+    if (same && frac == null) {
+      if (player.ended) { player.ended = false; player.ctrl.restart(); } else player.ctrl.togglePlay();
+      return;
+    }
+    if (same) {                                   // salto dentro de la canción que ya suena
+      player.ctrl.seek(Math.floor(frac * (player.dur || d.duration_ms) / 1000));
+      if (player.paused) player.ctrl.resume();
+      return;
+    }
+    // el salto inicial solo tiene sentido si sabemos que suena la canción completa
+    const startAt = frac != null && player.full ? Math.floor(frac * d.duration_ms / 1000) : 0;
+    player.id = id; player.pos = startAt * 1000; player.dur = 0; player.paused = true; player.started = false; player.ended = false;
+    d3.select("#player-slot").attr("hidden", null);
+    updatePlayerUI();
+    if (player.ctrl) { player.ctrl.loadUri(d.spotify_uri, false, startAt); player.ctrl.play(); return; }
+    if (player.creating) return;                  // al terminar de crearse cargará la última pista pedida
+    player.creating = true;
+    loadSpotifyApi().then(api => {
+      api.createController(document.getElementById("embed"), { uri: byId.get(player.id).spotify_uri, width: "100%", height: 80, theme: "dark" }, ctrl => {
+        player.ctrl = ctrl; player.creating = false;
+        ctrl.addListener("playback_update", onPlayback);
+        ctrl.play();
+      });
+    }).catch(() => { player.creating = false; });
+  }
+
+  function onPlayback(e) {
+    const s = e.data || {}, cur = byId.get(player.id);
+    if (!cur || (s.playingURI && s.playingURI !== cur.spotify_uri)) return;   // aviso de una pista anterior
+    player.pos = s.position || 0; player.dur = s.duration || 0; player.paused = !!s.isPaused;
+    if (!player.paused) player.started = true;
+    if (player.dur > 35000) player.full = true;
+    // Fin de pista: Spotify deja la posición al final sin avisar de la pausa. En las canciones del disco
+    // se pasa a la siguiente, como al escuchar el álbum; en el resto, el reproductor queda parado.
+    const ended = player.dur > 0 && player.pos >= player.dur - 400;
+    if (ended && !player.ended) {
+      player.ended = true; player.paused = true;
+      updatePlayerUI();
+      if (cur.type === "album" && cur.n < 9) {
+        const next = tracks.find(t => t.type === "album" && t.n === cur.n + 1);
+        if (state.active === cur.id) select(next.id);
+        play(next.id);
+      }
+      return;
+    }
+    if (!ended) player.ended = false; else player.paused = true;
+    updatePlayerUI();
+  }
+
+  function updatePlayerUI() {
+    const t = T(), cur = player.id ? byId.get(player.id) : null;
+    const frac = cur && player.dur ? Math.min(1, player.pos / player.dur) : 0;
+    const playing = !!cur && !player.paused;
+    svg.selectAll(".track").classed("current", function () { return !!cur && this.dataset.id === cur.id; })
+      .classed("playing", function () { return playing && this.dataset.id === cur.id; });
+    svg.selectAll(".prog").each(function () {
+      const on = !!cur && this.parentNode.parentNode.dataset.id === cur.id, c = 2 * Math.PI * +this.getAttribute("r");
+      d3.select(this).attr("stroke-dasharray", `${on ? frac * c : 0} ${c}`);
+    });
+    svg.selectAll("clipPath rect").each(function () {
+      const id = this.parentNode.id.slice(5), seg = LAYOUT[id].seg;
+      d3.select(this).attr("height", cur && id === cur.id ? frac * (seg[1] - seg[0]) : 0);
+    });
+    // indicador de la barra superior
+    d3.select("#now").attr("hidden", cur ? null : "");
+    if (cur) {
+      d3.select("#now-toggle").text(playing ? "❚❚" : "▶").attr("aria-label", playing ? t.pause : t.play);
+      d3.select("#now-title").text(cur.title).attr("aria-label", `${t.nowPlaying}: ${cur.title}`);
+      d3.select("#now-time").text(player.dur ? `${mmss(player.pos)} / ${mmss(player.dur)}` : "");
+    }
+    // botón y avisos del panel
+    const btn = panel.select(".play-btn");
+    if (!btn.empty()) {
+      const mine = playing && btn.attr("data-play") === cur.id;
+      btn.text(mine ? "❚❚ " + t.pause : "▶ " + t.play).classed("on", mine);
+    }
+    const preview = !!cur && player.dur > 0 && player.dur <= 35000;
+    d3.select("#player-note").text(player.error ? t.playerError : preview ? t.previewNote : (cur && !player.started ? t.blockedNote : ""));
+  }
+
+  d3.select("#now-toggle").on("click", () => { if (player.id) play(player.id); });
+  d3.select("#now-title").on("click", () => { if (player.id) select(player.id, { scroll: true }); });
 
   // ---------- Eventos globales ----------
   d3.selectAll(".lang button").on("click", function () {
