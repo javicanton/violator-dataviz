@@ -8,7 +8,20 @@ window.I18N = {
     pause: "Pausa",
     previewNote: "Estás oyendo solo un fragmento (hasta 30 segundos). Para escuchar la canción completa, inicia sesión en Spotify en este navegador.",
     blockedNote: "Si no empieza a sonar, pulsa el botón de reproducción del reproductor de Spotify.",
-    playerError: "No se ha podido cargar el reproductor de Spotify.",
+    playerError: "Tu navegador no ha podido cargar el reproductor de Spotify (suele deberse a un bloqueador de contenido o de rastreadores). Puedes desactivarlo para esta página o abrir la canción en Spotify con el enlace.",
+    compare: "Comparar con la media",
+    compareHint: "Línea discontinua: media de las 15 pistas",
+    explore: "Explorar",
+    exploreHint: "Más luz = valor más alto. El número es el puesto entre las 15 pistas.",
+    keysHint: "Teclado: espacio reproduce o pausa · ← → cambia de canción · Esc cierra",
+    mean: "media",
+    studiosTitle: "Dónde se grabó",
+    studios: {
+      milan: ["Milán", "Logic Studios", "Primeras sesiones, en la primavera de 1989. Se terminó poco material, pero aquí el grupo y Flood fijaron el nuevo sonido y la forma de trabajar. Se avanzó «Personal Jesus» y se empezó «World in My Eyes»."],
+      gjerlev: ["Gjerlev (Dinamarca)", "Puk Studios", "Aquí se grabó el grueso del álbum, hasta finales de agosto de 1989. «World in My Eyes» se rehízo casi por completo y «Policy of Truth» fue de las primeras en grabarse."],
+      london: ["Londres", "The Church · Master Rock", "A partir de septiembre de 1989: últimos retoques, caras B y remezclas. En The Church se hizo la mezcla final, a cargo de François Kevorkian."],
+      newyork: ["Nueva York", "Axis Studios", "Figura en los créditos del disco como uno de los estudios de grabación. Las fuentes consultadas no detallan qué se hizo aquí."]
+    },
     nowPlaying: "Sonando",
     months: ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
     features: {
@@ -60,7 +73,20 @@ window.I18N = {
     pause: "Pause",
     previewNote: "You are hearing only a preview (up to 30 seconds). To listen to the full song, log in to Spotify in this browser.",
     blockedNote: "If it does not start, press the play button on the Spotify player.",
-    playerError: "The Spotify player could not be loaded.",
+    playerError: "Your browser could not load the Spotify player (usually because of a content or tracker blocker). You can disable it for this page or open the song in Spotify with the link.",
+    compare: "Compare with average",
+    compareHint: "Dashed line: average of the 15 tracks",
+    explore: "Explore",
+    exploreHint: "Brighter = higher value. The number is the rank among the 15 tracks.",
+    keysHint: "Keyboard: space plays or pauses · ← → changes song · Esc closes",
+    mean: "average",
+    studiosTitle: "Where it was recorded",
+    studios: {
+      milan: ["Milan", "Logic Studios", "The first sessions, in spring 1989. Little material was finished, but this is where the band and Flood settled the new sound and way of working. \"Personal Jesus\" was developed and \"World in My Eyes\" was started."],
+      gjerlev: ["Gjerlev (Denmark)", "Puk Studios", "The bulk of the album was recorded here, until the end of August 1989. \"World in My Eyes\" was almost completely reworked and \"Policy of Truth\" was among the first tracks recorded."],
+      london: ["London", "The Church · Master Rock", "From September 1989: final touches, B-sides and remixes. The final mix, by François Kevorkian, was done at The Church."],
+      newyork: ["New York", "Axis Studios", "Listed in the album credits as one of the recording studios. The sources consulted do not detail what was done here."]
+    },
     nowPlaying: "Now playing",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     features: {

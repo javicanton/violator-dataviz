@@ -32,6 +32,8 @@
     "happiest-girl":         { c: [845.8, 595.8], L: 61.4, label: [827, 471], mx: 907 },
     "sea-of-sin":            { c: [863.1, 755.6], L: 58.9, label: [932, 755], mx: 942 }
   };
+  // Marcadores del mapa de grabación (coordenadas del arte original)
+  const PINS = { london: [269.5, 2788], gjerlev: [282.3, 2782], milan: [282.3, 2797], newyork: [164.2, 2811] };
   const INTERLUDES = [
     { x: 762, y: 1936, lines: ["Interlude #2", "Crucified"] },
     { x: 764, y: 2396, lines: ["Interlude #3"] }
@@ -51,7 +53,7 @@
 
   // ---------- Estado ----------
   const mq = window.matchMedia("(max-width: 720px)");
-  const state = { lang: initialLang(), active: null, mobile: mq.matches };
+  const state = { lang: initialLang(), active: null, mobile: mq.matches, compare: false, explore: null };
   const T = () => window.I18N[state.lang];
 
   function initialLang() {
@@ -68,10 +70,26 @@
   const defs = svg.append("defs");
   art.querySelectorAll("defs > g").forEach(n => defs.node().appendChild(document.importNode(n, true)));
   const artNode = id => document.importNode(art.querySelector("#" + id), true);
+  const dark = artNode("plant"); dark.id = "plant-dark";
+  dark.querySelectorAll("path").forEach(p => p.setAttribute("fill", "#000"));
+  defs.node().appendChild(dark);
+
+  // ---------- Etiqueta flotante ----------
+  const tip = d3.select("#tip");
+  function showTip(html, ev) {
+    tip.html(html).attr("hidden", null);
+    const w = tip.node().offsetWidth, h = tip.node().offsetHeight;
+    const x = Math.min(window.innerWidth - w - 8, Math.max(8, ev.clientX + 14));
+    const y = ev.clientY + 18 + h > window.innerHeight ? ev.clientY - h - 12 : ev.clientY + 18;
+    tip.style("left", x + "px").style("top", y + "px");
+  }
+  function hideTip() { tip.attr("hidden", ""); }
 
   // ---------- Utilidades de dibujo ----------
   const fmtDate = iso => { const [y, m, d] = iso.split("-").map(Number); return `${d} ${T().months[m - 1]} ${y}`; };
   const fmtVal = v => Math.round(v * 1000);
+  const iconSvg = f => `<svg class="ic" viewBox="-13 -15 26 30" aria-hidden="true"><use href="#ic-${f}"/></svg>`;
+  const mmss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
   function radarPath(feats, L) {
     const line = d3.lineRadial()
@@ -156,23 +174,58 @@
     const stems = root.append("g").attr("class", "stems");
     tracks.filter(d => LAYOUT[d.id].seg).forEach(d => {
       const seg = LAYOUT[d.id].seg, path = stemPath(d, seg);
-      const onClick = ev => {
-        // la altura del clic dentro del tramo indica desde qué punto de la canción empezar
-        const y = d3.pointer(ev, root.node())[1];
-        activate(d.id, Math.min(0.98, Math.max(0, (y - seg[0]) / (seg[1] - seg[0]))));
+      // El tramo funciona como barra de reproducción: la altura del puntero es el punto de la canción.
+      const fracAt = ev => Math.min(0.985, Math.max(0, (d3.pointer(ev, root.node())[1] - seg[0]) / (seg[1] - seg[0])));
+      const durOf = () => (player.id === d.id && player.dur ? player.dur : d.duration_ms);
+      let dragging = false;
+      const onMove = ev => {
+        const f = fracAt(ev);
+        ghost.attr("y1", seg[0] + f * (seg[1] - seg[0])).attr("y2", seg[0] + f * (seg[1] - seg[0])).style("display", null);
+        if (ev.pointerType !== "touch") showTip(`<b>${d.title}</b> · ${mmss(f * durOf())}`, ev);
       };
-      stems.append("path").attr("class", "stem").attr("data-id", d.id).attr("d", path).on("click", onClick);
+      const onLeave = () => { ghost.style("display", "none"); hideTip(); };
+      stems.append("path").attr("class", "stem").attr("data-id", d.id).attr("d", path);
       // la parte ya escuchada se pinta encima, recortada por un rectángulo que crece con la reproducción
       stems.append("clipPath").attr("id", "clip-" + d.id)
         .append("rect").attr("x", seg[2] - STEM_HALF - 4).attr("y", seg[0]).attr("width", STEM_HALF * 2 + 8).attr("height", 0);
       stems.append("path").attr("class", "stem-prog").attr("data-id", d.id).attr("d", path)
-        .attr("clip-path", `url(#clip-${d.id})`).on("click", onClick);
+        .attr("clip-path", `url(#clip-${d.id})`);
+      const ghost = stems.append("line").attr("class", "ghost").attr("x1", seg[2] - STEM_HALF - 8).attr("x2", seg[2] + STEM_HALF + 8).style("display", "none");
+      // cabezal y tiempo de la canción que suena; el tiempo va en el lado libre (el contrario a la hoja)
+      const left = LAYOUT[d.id].m[2] === "end";
+      const head = stems.append("g").attr("class", "playhead").attr("data-id", d.id).style("display", "none");
+      head.append("line").attr("x1", seg[2] - STEM_HALF - 8).attr("x2", seg[2] + STEM_HALF + 8);
+      if (!mobile) head.append("text").attr("x", seg[2] + (left ? -1 : 1) * (STEM_HALF + 14)).attr("y", 5).attr("text-anchor", left ? "end" : "start");
       stems.append("rect").attr("class", "stem-hit").attr("data-id", d.id)
-        .attr("x", seg[2] - STEM_HALF - 6).attr("y", seg[0]).attr("width", STEM_HALF * 2 + 12).attr("height", seg[1] - seg[0]).on("click", onClick);
+        .attr("x", seg[2] - STEM_HALF - 8).attr("y", seg[0]).attr("width", STEM_HALF * 2 + 16).attr("height", seg[1] - seg[0])
+        .on("pointerdown", function (ev) { dragging = true; try { this.setPointerCapture(ev.pointerId); } catch (e) { /* sin captura */ } onMove(ev); })
+        .on("pointermove", onMove)
+        .on("pointerup", ev => { if (dragging) { dragging = false; activate(d.id, fracAt(ev)); } if (ev.pointerType === "touch") onLeave(); })
+        .on("pointercancel", () => { dragging = false; onLeave(); })
+        .on("pointerleave", () => { if (!dragging) onLeave(); });
     });
 
     // Rosa y hojas
     root.node().appendChild(artNode("plant"));
+
+    // Modo explorar: una copia negra de la planta, recortada en una celda por radar (la zona más cercana
+    // a cada uno), oscurece cada hoja según su valor en el atributo elegido.
+    const shade = root.append("g").attr("class", "shade");
+    // Cada radar aporta su centro y seis puntos a su alrededor: así la frontera entre una hoja grande y
+    // una pequeña cae entre ambas y no por mitad de la grande.
+    const sites = [];
+    order.forEach(id => {
+      const { c, L } = LAYOUT[id];
+      sites.push({ id, p: c });
+      for (let k = 0; k < 6; k++) sites.push({ id, p: [c[0] + Math.cos(k * Math.PI / 3) * L * 0.8, c[1] + Math.sin(k * Math.PI / 3) * L * 0.8] });
+    });
+    const vor = d3.Delaunay.from(sites.map(s => s.p)).voronoi([0, 0, W, H]);
+    order.forEach(id => {
+      shade.append("clipPath").attr("id", "cell-" + id).append("path")
+        .attr("d", sites.map((s, i) => (s.id === id ? vor.renderCell(i) : "")).join(""));
+      shade.append("g").attr("clip-path", `url(#cell-${id})`).attr("class", "shade-cell").attr("data-id", id).style("opacity", 0)
+        .append("use").attr("href", "#plant-dark");
+    });
 
     if (!mobile) {
       INTERLUDES.forEach(it => {
@@ -196,7 +249,25 @@
       r.append("circle").attr("class", "halo").attr("r", lay.L * 1.16);
       if (id !== "album") r.append("circle").attr("class", "prog").attr("r", lay.L * 1.16).attr("transform", "rotate(-90)");
       drawRadar(r, lay.L, d.features, lay.L * 0.0095);
-      r.append("circle").attr("class", "hit").attr("r", lay.L * 1.16);
+      if (id !== "album") r.append("path").attr("class", "mean").attr("d", radarPath(data.album.features_mean, lay.L));
+      const dot = r.append("circle").attr("class", "vdot").attr("r", Math.max(2.5, lay.L * 0.05)).style("display", "none");
+      // un sector invisible por eje: recoge el clic y muestra el valor exacto al pasar el puntero
+      FEATS.forEach((f, i) => {
+        const a = i * Math.PI / 3;
+        r.append("path").attr("class", "hit")
+          .attr("d", d3.arc()({ innerRadius: 0, outerRadius: lay.L * 1.16, startAngle: a - Math.PI / 6, endAngle: a + Math.PI / 6 }))
+          .on("pointermove", ev => {
+            if (ev.pointerType === "touch") return;
+            const rr = d.features[f] * R_UNIT * lay.L;
+            dot.attr("cx", Math.sin(a) * rr).attr("cy", -Math.cos(a) * rr).style("display", null);
+            const extra = id === "album" ? "" : ` <span class="tip-sub">${t.mean} ${fmtVal(data.album.features_mean[f])}</span>`;
+            showTip(`<span class="tip-title">${d.title}</span>${iconSvg(f)}<b>${t.features[f][1]}</b> ${fmtVal(d.features[f])}${extra}`, ev);
+          })
+          .on("pointerleave", () => { dot.style("display", "none"); hideTip(); });
+      });
+      const badge = r.append("g").attr("class", "badge");
+      badge.append("rect").attr("x", -30).attr("y", -13).attr("width", 60).attr("height", 26).attr("rx", 13);
+      badge.append("text").attr("y", 5);
 
       if (id === "album") return;
       const big = d.type === "album";
@@ -222,8 +293,38 @@
     if (!mobile) { drawLegend(root, t); drawCredits(root, t); }
     markActive();
     renderMobileBlocks(t);
+    renderTools(t);
     if (state.active) renderPanel();
     updatePlayerUI();
+    updateExplore();
+  }
+
+  // ---------- Herramientas: comparar con la media y explorar por atributo ----------
+  function renderTools(t) {
+    d3.select("#tools").html(
+      `<button type="button" class="chip" id="t-compare" aria-pressed="${state.compare}"><span class="dash"></span>${t.compare}</button>` +
+      `<span class="tools-label">${t.explore}:</span>` +
+      LEGEND_ORDER.map(f => `<button type="button" class="chip" data-f="${f}" aria-pressed="${state.explore === f}">${iconSvg(f)}${t.features[f][1]}</button>`).join("") +
+      `<span class="tools-hint" id="tools-hint"></span>`);
+    d3.select("#t-compare").on("click", () => { state.compare = !state.compare; renderTools(T()); updateExplore(); });
+    d3.selectAll("#tools [data-f]").on("click", function () {
+      state.explore = state.explore === this.dataset.f ? null : this.dataset.f; renderTools(T()); updateExplore();
+    });
+    d3.select("#tools-hint").text(state.explore ? t.exploreHint : state.compare ? t.compareHint : "");
+  }
+
+  function updateExplore() {
+    const f = state.explore;
+    svg.classed("show-mean", state.compare).classed("exploring", !!f);
+    if (!f) { svg.selectAll(".shade-cell").style("opacity", 0); return; }
+    const ranked = [...tracks].sort((a, b) => b.features[f] - a.features[f]);
+    const max = ranked[0].features[f], min = ranked[ranked.length - 1].features[f];
+    const norm = v => Math.min(1, Math.max(0, (v - min) / ((max - min) || 1)));
+    svg.selectAll(".shade-cell").style("opacity", function () { return (1 - norm(itemOf(this.dataset.id).features[f])) * 0.8; });
+    svg.selectAll(".track").each(function () {
+      const id = this.dataset.id, d = itemOf(id);
+      d3.select(this).select(".badge text").text(id === "album" ? fmtVal(d.features[f]) : `${state.lang === "es" ? (ranked.indexOf(d) + 1) + "º" : "#" + (ranked.indexOf(d) + 1)} · ${fmtVal(d.features[f])}`);
+    });
   }
 
   function drawLegend(root, t) {
@@ -280,6 +381,17 @@
       block.remove();
     }
     g.node().appendChild(artNode("map"));
+    Object.entries(PINS).forEach(([k, [x, y]]) => {
+      const [city, studio, text] = t.studios[k];
+      const html = `<span class="tip-title">${city} · ${studio}</span>${text}`;
+      g.append("circle").attr("class", "pin-hit").attr("cx", x).attr("cy", y).attr("r", 9)
+        .attr("tabindex", 0).attr("role", "button").attr("aria-label", `${city}, ${studio}. ${text}`)
+        .on("pointerenter pointermove", ev => showTip(html, ev))
+        .on("pointerleave", hideTip)
+        .on("click", ev => { ev.stopPropagation(); showTip(html, ev); })
+        .on("focus", function () { const b = this.getBoundingClientRect(); showTip(html, { clientX: b.right, clientY: b.top }); })
+        .on("blur", hideTip);
+    });
     const src = g.append("text").attr("class", "cr").attr("x", 1491).attr("y", 2895).attr("text-anchor", "end");
     src.append("tspan").attr("font-weight", 700).text(t.source[0]);
     src.append("tspan").text(t.source[1]);
@@ -289,7 +401,6 @@
   }
 
   // ---------- Bloques HTML para móvil ----------
-  const iconSvg = f => `<svg class="ic" viewBox="-13 -15 26 30" aria-hidden="true"><use href="#ic-${f}"/></svg>`;
 
   function renderMobileBlocks(t) {
     d3.select("#m-legend").html(
@@ -302,7 +413,9 @@
       `<h2>${t.creditsTitle}</h2>` +
       `<p><b>${t.band}</b> Alan Wilder, David Gahan, Andrew Fletcher, Martin L. Gore</p>` +
       t.credits.map(([k, v]) => `<p><b>${k}</b> ${v}</p>`).join("") +
-      `<p><b>${t.source[0]}</b>${t.source[1]}</p>` +
+      `<h2>${t.studiosTitle}</h2>` +
+      Object.keys(PINS).map(k => `<p><b>${t.studios[k][0]} · ${t.studios[k][1]}.</b> ${t.studios[k][2]}</p>`).join("") +
+      `<h2>${t.source[0]}</h2><p>Spotify API - Wikipedia</p>` +
       `<p>${t.by} · <a href="https://javiercanton.com" target="_blank" rel="noopener">javiercanton.com</a></p>` +
       `<p><a href="assets/violator_${state.lang === "es" ? "spa" : "eng"}.pdf">${t.download}</a></p>`);
     d3.select("#foot").html(`<a href="assets/violator_${state.lang === "es" ? "spa" : "eng"}.pdf">${t.download}</a>`);
@@ -373,6 +486,7 @@
     panel.attr("aria-hidden", "false"); document.body.classList.add("panel-open");
     panel.select(".close").on("click", () => select(null));
     panel.selectAll("[data-go]").on("click", function () { select(this.dataset.go, { scroll: true }); });
+    panel.select("#p-rest").append("p").attr("class", "keys d-only").text(t.keysHint);
     panel.select(".play-btn").on("click", function () { play(this.dataset.play); });
     panel.node().scrollTop = 0;
     updatePlayerUI();
@@ -382,8 +496,7 @@
   // Un único reproductor incrustado para toda la página. Con sesión iniciada en Spotify suena la canción
   // completa; sin ella, un fragmento de 30 segundos. La posición que comunica Spotify mueve el progreso
   // sobre el tallo y el anillo de cada radar.
-  const player = { api: null, ctrl: null, creating: false, id: null, paused: true, pos: 0, dur: 0, full: false, error: false, started: false };
-  const mmss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const player = { api: null, ctrl: null, creating: false, id: null, paused: true, pos: 0, dur: 0, full: false, error: false, started: false, alive: false, ended: false };
 
   function loadSpotifyApi() {
     if (!player.api) {
@@ -392,11 +505,44 @@
         const s = document.createElement("script");
         s.src = "https://open.spotify.com/embed/iframe-api/v1"; s.async = true;
         s.onerror = () => reject(new Error("Spotify iFrame API"));
+        setTimeout(() => reject(new Error("Spotify iFrame API: tiempo agotado")), 6000);
         document.head.appendChild(s);
       });
-      player.api.catch(() => { player.error = true; updatePlayerUI(); });
     }
     return player.api;
+  }
+
+  // Controlador de reserva. Si el navegador bloquea el script de la API (algunos bloqueadores lo hacen),
+  // se crea el iframe a mano y se habla con él con los mismos mensajes que usa la API oficial.
+  function fallbackController(el, uri) {
+    const ORIGIN = "https://open.spotify.com", listeners = {};
+    let loading = true, queue = [], current = "";
+    const iframe = document.createElement("iframe");
+    iframe.title = "Spotify"; iframe.width = "100%"; iframe.height = "80"; iframe.setAttribute("frameborder", "0");
+    iframe.allow = "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+    const post = msg => { if (iframe.contentWindow) iframe.contentWindow.postMessage(msg, ORIGIN); };
+    const send = msg => { if (loading) queue.push(msg); else post(msg); };
+    window.addEventListener("message", e => {
+      if (e.source !== iframe.contentWindow || !e.data || !e.data.type) return;
+      if (e.data.type === "ready") { loading = false; const q = queue; queue = []; q.forEach(post); post({ command: "load_complete_ack" }); }
+      (listeners[e.data.type] || []).forEach(h => h({ data: e.data.payload || {} }));
+    });
+    const ctrl = {
+      loadUri(u, _video, t) {
+        if (u === current) return;
+        current = u; loading = true; queue = [];
+        iframe.src = `${ORIGIN}/embed/track/${u.split(":").pop()}?theme=0&utm_source=iframe-api${t ? "&t=" + t : ""}`;
+      },
+      play() { send({ command: "play" }); },
+      resume() { send({ command: "resume" }); },
+      togglePlay() { send({ command: "toggle" }); },
+      restart() { send({ command: "play_from_start" }); },
+      seek(sec) { send({ command: "seek", timestamp: sec }); },
+      addListener(name, h) { (listeners[name] = listeners[name] || []).push(h); }
+    };
+    el.replaceWith(iframe);
+    ctrl.loadUri(uri);
+    return ctrl;
   }
 
   // Abre el panel de una pista y la hace sonar. frac (0-1) es el punto de inicio si se pulsó sobre el tallo.
@@ -425,14 +571,19 @@
     updatePlayerUI();
     if (player.ctrl) { player.ctrl.loadUri(d.spotify_uri, false, startAt); player.ctrl.play(); return; }
     if (player.creating) return;                  // al terminar de crearse cargará la última pista pedida
-    player.creating = true;
-    loadSpotifyApi().then(api => {
-      api.createController(document.getElementById("embed"), { uri: byId.get(player.id).spotify_uri, width: "100%", height: 80, theme: "dark" }, ctrl => {
+    player.creating = true; player.error = false;
+    const el = () => document.getElementById("embed"), uri = () => byId.get(player.id).spotify_uri;
+    loadSpotifyApi()
+      .then(api => new Promise(done => api.createController(el(), { uri: uri(), width: "100%", height: 80, theme: "dark" }, done)),
+            () => fallbackController(el(), uri()))
+      .then(ctrl => {
         player.ctrl = ctrl; player.creating = false;
-        ctrl.addListener("playback_update", onPlayback);
+        ctrl.addListener("ready", () => { player.alive = true; player.error = false; updatePlayerUI(); });
+        ctrl.addListener("playback_update", e => { player.alive = true; player.error = false; onPlayback(e); });
         ctrl.play();
+        // si el reproductor no da señales de vida, es que el navegador bloquea Spotify por completo
+        setTimeout(() => { if (!player.alive) { player.error = true; updatePlayerUI(); } }, 9000);
       });
-    }).catch(() => { player.creating = false; });
   }
 
   function onPlayback(e) {
@@ -468,9 +619,17 @@
       const on = !!cur && this.parentNode.parentNode.dataset.id === cur.id, c = 2 * Math.PI * +this.getAttribute("r");
       d3.select(this).attr("stroke-dasharray", `${on ? frac * c : 0} ${c}`);
     });
-    svg.selectAll("clipPath rect").each(function () {
+    svg.selectAll(".stems clipPath rect").each(function () {
       const id = this.parentNode.id.slice(5), seg = LAYOUT[id].seg;
       d3.select(this).attr("height", cur && id === cur.id ? frac * (seg[1] - seg[0]) : 0);
+    });
+    svg.selectAll(".playhead").each(function () {
+      const on = !!cur && this.dataset.id === cur.id, seg = LAYOUT[this.dataset.id].seg, g = d3.select(this);
+      g.style("display", on ? null : "none");
+      if (on) {
+        g.attr("transform", `translate(0,${seg[0] + frac * (seg[1] - seg[0])})`);
+        g.select("text").text(player.dur ? `${mmss(player.pos)} / ${mmss(player.dur)}` : "");
+      }
     });
     // indicador de la barra superior
     d3.select("#now").attr("hidden", cur ? null : "");
@@ -490,6 +649,25 @@
   }
 
   d3.select("#now-toggle").on("click", () => { if (player.id) play(player.id); });
+
+  // ---------- Teclado ----------
+  document.addEventListener("keydown", ev => {
+    if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    const el = ev.target, interactive = el.closest && el.closest("button, a, input, select, textarea, [role=button]");
+    if (ev.key === " " && !interactive) {
+      const id = player.id || (state.active !== "album" ? state.active : null);
+      if (id) { ev.preventDefault(); play(id); }
+    } else if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+      const ids = tracks.map(t => t.id), cur = ids.indexOf(state.active && state.active !== "album" ? state.active : player.id);
+      const next = ids[(cur + (ev.key === "ArrowRight" ? 1 : cur < 0 ? 0 : -1) + ids.length) % ids.length];
+      ev.preventDefault();
+      const wasPlaying = player.id && !player.paused;
+      select(next, { scroll: true });
+      if (wasPlaying) play(next);
+    }
+  });
+  document.addEventListener("click", ev => { if (!ev.target.closest || !ev.target.closest(".pin-hit")) hideTip(); });
+  window.addEventListener("scroll", hideTip, { passive: true });
   d3.select("#now-title").on("click", () => { if (player.id) select(player.id, { scroll: true }); });
 
   // ---------- Eventos globales ----------
