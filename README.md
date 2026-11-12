@@ -36,4 +36,8 @@ Data comes from the Spotify API (R and `spotifyr`), waveforms from WaveFormer, t
 
 Datos: Spotify API y Wikipedia. *Violator* es una obra de Depeche Mode (Mute Records, 1990); portada de Anton Corbijn y Area.
 
+## Licencia
+
+La infografía y esta visualización son obra de Javi Cantón-Correa y se publican bajo licencia [Creative Commons Atribución-SinDerivadas 4.0 (CC BY-ND 4.0)](https://creativecommons.org/licenses/by-nd/4.0/deed.es): se pueden compartir citando al autor, sin modificarlas. La licencia no cubre la música, la portada ni las marcas de terceros, ni la biblioteca D3 (licencia ISC).
+
 Javi Cantón-Correa · [javiercanton.com](https://javiercanton.com)

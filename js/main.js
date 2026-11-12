@@ -155,7 +155,7 @@
     const t = T(), mobile = state.mobile;
     document.documentElement.lang = t.lang;
     document.title = t.pageTitle;
-    d3.select("#intro").text(t.intro);
+    d3.select("#intro").html(`${t.intro} <span class="intro-more">${t.introMore}</span> <span class="intro-keys">${t.introKeys}</span>`);
     d3.selectAll(".lang button").attr("aria-pressed", function () { return this.dataset.lang === state.lang; });
 
     svg.selectAll(":scope > g").remove();
@@ -400,6 +400,25 @@
       .append("text").attr("class", "cr link").attr("x", 1491).attr("y", 2988).attr("text-anchor", "end").attr("font-weight", 700).text("javiercanton.com");
   }
 
+  // ---------- Distribución de cada atributo (diagrama de caja con las 15 pistas) ----------
+  const DIST = {};
+  FEATS.forEach(f => {
+    const v = tracks.map(d => d.features[f]).sort(d3.ascending);
+    DIST[f] = { v, min: v[0], max: v[v.length - 1], q1: d3.quantile(v, 0.25), q3: d3.quantile(v, 0.75), mean: data.album.features_mean[f] };
+  });
+  const pct = x => (x * 100).toFixed(1) + "%";
+  function distHtml(f, value, t) {
+    const s = DIST[f];
+    return `<span class="dist" role="img" aria-label="${fmtVal(value)}; ${t.distAria} ${fmtVal(s.mean)}">` +
+      `<span class="d-axis"></span>` +
+      `<span class="d-range" style="left:${pct(s.min)};width:${pct(s.max - s.min)}"></span>` +
+      `<span class="d-box" style="left:${pct(s.q1)};width:${pct(s.q3 - s.q1)}"></span>` +
+      s.v.map(x => `<span class="d-pt" style="left:${pct(x)}"></span>`).join("") +
+      `<span class="d-mean" style="left:${pct(s.mean)}"></span>` +
+      `<span class="d-val" style="left:${pct(value)}"></span></span>`;
+  }
+  const licenseHtml = t => `${t.license} <a href="${t.licenseUrl}" target="_blank" rel="license noopener" title="${t.licenseHint}">CC BY-ND 4.0</a>`;
+
   // ---------- Bloques HTML para móvil ----------
 
   function renderMobileBlocks(t) {
@@ -417,8 +436,10 @@
       Object.keys(PINS).map(k => `<p><b>${t.studios[k][0]} · ${t.studios[k][1]}.</b> ${t.studios[k][2]}</p>`).join("") +
       `<h2>${t.source[0]}</h2><p>Spotify API - Wikipedia</p>` +
       `<p>${t.by} · <a href="https://javiercanton.com" target="_blank" rel="noopener">javiercanton.com</a></p>` +
-      `<p><a href="assets/violator_${state.lang === "es" ? "spa" : "eng"}.pdf">${t.download}</a></p>`);
-    d3.select("#foot").html(`<a href="assets/violator_${state.lang === "es" ? "spa" : "eng"}.pdf">${t.download}</a>`);
+      `<p><a href="assets/violator_${state.lang === "es" ? "spa" : "eng"}.pdf">${t.download}</a></p>` +
+      `<p class="lic">${licenseHtml(t)}</p>`);
+    d3.select("#foot").html(`<a href="assets/violator_${state.lang === "es" ? "spa" : "eng"}.pdf">${t.download}</a>` +
+      `<span class="lic">${licenseHtml(t)}</span>`);
   }
 
   // ---------- Selección y panel de detalle ----------
@@ -461,7 +482,7 @@
     }
     const bars = LEGEND_ORDER.map(f =>
       `<li>${iconSvg(f)}<span class="fn">${t.features[f][1]}</span>` +
-      `<span class="bar"><span style="width:${(d.features[f] * 100).toFixed(1)}%"></span></span><span class="fv">${fmtVal(d.features[f])}</span></li>`).join("");
+      `${distHtml(f, d.features[f], t)}<span class="fv">${fmtVal(d.features[f])}</span></li>`).join("");
     // El panel tiene tres zonas: cabecera y cuerpo se repintan; la del reproductor es fija para que
     // el iframe de Spotify no se destruya al cambiar de canción.
     if (panel.select("#p-top").empty()) {
@@ -481,7 +502,7 @@
       (txt ? `<p class="txt">${txt}</p>` : "") +
       (d.hidden_track ? `<p class="hidden-track">${t.hidden}: ${d.hidden_track}</p>` : "") +
       (isAlbum ? `<p class="note">${t.albumMean}</p>` : "") +
-      `<ul class="bars">${bars}</ul>` +
+      `<ul class="bars">${bars}</ul><p class="dist-legend">${t.distLegend}</p>` +
       `<div class="nav"><button type="button" data-go="${prev}">← ${itemOf(prev).title}</button><button type="button" data-go="${next}">${itemOf(next).title} →</button></div>`);
     panel.attr("aria-hidden", "false"); document.body.classList.add("panel-open");
     panel.select(".close").on("click", () => select(null));
@@ -667,7 +688,7 @@
     }
   });
   document.addEventListener("click", ev => { if (!ev.target.closest || !ev.target.closest(".pin-hit")) hideTip(); });
-  window.addEventListener("scroll", hideTip, { passive: true });
+  window.addEventListener("scroll", () => { hideTip(); document.body.classList.toggle("scrolled", window.scrollY > 120); }, { passive: true });
   d3.select("#now-title").on("click", () => { if (player.id) select(player.id, { scroll: true }); });
 
   // ---------- Eventos globales ----------
